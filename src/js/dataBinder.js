@@ -1,87 +1,79 @@
-import Renderer from "./renderer";
+import FileTree from "./file_tree";
 
 export default class DataBinder {
     constructor(elementId, tree) {
         this.tree = tree;
-        Renderer.renderRoot(tree, elementId);
+        FileTree.renderRoot(tree, elementId);
     }
 
     handleEvent(event) {
         if (event.type === 'click') {
-            if (event.target.classList.contains(['form-check-input'])) {
-                const li = event.target.parentNode.parentNode;
-                this.changeTreeData(li);
-                this.changeDom(li);
-            }
-
             if (event.target.classList.contains(['switcher'])) {
-                this.expandDOMNode(event);
+                this.handleSwitcherClick(event);
+            }
+
+            if (event.target.classList.contains(['node-label'])) {
+                this.handleNodeLabelClick(event);
+            }
+
+            if (event.target.id === 'panel-subscribe-btn') {
+                this.handleSubscriptionClick(event);
             }
         }
     }
 
-    changeTreeData(li) {
-        const node = this.tree.getDescendant(li.dataset.path);
-        node.updateSubtreeChecks();
-        node.updateParentChecks();
-    }
-
-    changeDom(li) {
-        const subtreeRoot = this.tree.getDescendant(li.dataset.path);
-        for (let node of subtreeRoot) {
-            const checkbox = document.getElementById(node.path);
-            if (checkbox) {
-                checkbox.checked = node.checked;
-            }
-        }
-        this.changeDomParentNodes(subtreeRoot.parent);
-    }
-
-    changeDomParentNodes(treeNode) {
-        if (treeNode.parent === null) return;
-        const checkbox = document.getElementById(treeNode.path);
-        checkbox.indeterminate = (treeNode.checked === null);
-        checkbox.checked = treeNode.checked;
-        this.changeDomParentNodes(treeNode.parent);
-    }
-
-    collapseSiblingDOMNodes(event) {
+    handleNodeLabelClick(event) {
         const liNode = event.target.closest('li');
-        const ulNode = liNode.closest('ul');
-        const expandedSiblingUl = ulNode.querySelector('li:not([data-path="' + liNode.dataset.path + '"]) > ul[data-collapsed="false"]');
-        const expandedSiblingSwitcher = ulNode.querySelector('li:not([data-path="' + liNode.dataset.path + '"]) > span.switcher.expanded');
+        const liTreeNode = this.tree.getDescendant(liNode.dataset.path);
 
-        if (expandedSiblingUl) {
-            Renderer.collapseSection(expandedSiblingUl);
-            const expandedSiblingUlChild = expandedSiblingUl.querySelector('ul');
-            if (expandedSiblingUlChild) expandedSiblingUlChild.remove();
-        }
+        if (!liTreeNode.visible) return;
 
-        if (expandedSiblingSwitcher) expandedSiblingSwitcher.classList.remove('expanded');
+        FileTree.renderPanel(liTreeNode);
 
+        const button = document.getElementById('panel-subscribe-btn');
+        button.style = 'visibility: visible;';
     }
 
-    expandDOMNode(event) {
-        if (event.target.classList.contains('switcher')) {
-            event.target.classList.toggle('expanded');
-            this.collapseSiblingDOMNodes(event);
+    handleSwitcherClick(event) {
+        const liNode = event.target.closest('li');
+        const liTreeNode = this.tree.getDescendant(liNode.dataset.path);
+        const liNodeList = liNode.querySelector('ul');
+        const parentList = liNode.closest('ul');
+        const switcher = event.target;
 
-            const liNode = event.target.closest('li');
-            const treeNode = this.tree.getDescendant(liNode.dataset.path);
-            for (let child of treeNode.children) {
-                if (!child.isLeaf()) {
-                    let childDOMNode = document.querySelector('[data-path="' + child.path + '"]');
-                    Renderer.renderChildren(childDOMNode, child);
-                }
+        if (liNodeList.dataset.collapsed === 'false') {
+            FileTree.collapseSection(liNodeList);
+            FileTree.renderChildren(liNode, liTreeNode);
+        } else {
+            const expandedSiblingLiNodeList = parentList.querySelector('li > ul[data-collapsed="false"]');
+            if (expandedSiblingLiNodeList !== null) {
+                const expandedSiblingLiNode = expandedSiblingLiNodeList.closest('li');
+                const expandedSiblingTreeNode = this.tree.getDescendant(expandedSiblingLiNode.dataset.path);
+                FileTree.collapseSection(expandedSiblingLiNodeList);
+                FileTree.renderChildren(expandedSiblingLiNode, expandedSiblingTreeNode);
+
+                const switchers = expandedSiblingLiNode.querySelectorAll('span.switcher.expanded');
+                switchers.forEach(switcher => switcher.classList.remove('expanded'));
             }
 
-            const ul = liNode.querySelector('ul');
-            if (ul.dataset.collapsed === 'true') {
-                Renderer.expandSection(ul);
-            } else {
-                Renderer.collapseSection(ul);
+            FileTree.expandSection(liNodeList);
+            for (let child of liTreeNode.children) {
+                let childNode = document.querySelector('[data-path="' + child.path + '"]');
+                FileTree.renderChildren(childNode, child);
             }
-
         }
+
+        switcher.classList.toggle('expanded');
+    }
+
+    handleSubscriptionClick(event) {
+        const treeNode = this.tree.getDescendant(event.target.dataset.path);
+
+        treeNode.updateSubtreeSubscriptions();
+        treeNode.updateParentSubscriptions();
+        FileTree.UpdateDOMSubtreeSubscriptions(treeNode);
+        FileTree.updateDOMParentSubscriptions(treeNode);
+
+        event.target.textContent = !treeNode.subscribed ? 'Notify on pull request' : 'Stop notifications';
     }
 }
